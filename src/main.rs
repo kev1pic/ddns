@@ -1,87 +1,27 @@
-extern crate hyper;
 extern crate clap;
-extern crate uuid;
 
-use hyper::Client;
-use hyper_tls::HttpsConnector;
+use std::error::Error;
 use clap::{Arg, App};
-use uuid::Uuid;
 
-use std::net::IpAddr;
-
-struct DuckDnsApiParams {
-    token: String,
-    domain: String,
-    ip: String
-}
+mod duck_dns;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), Box<dyn Error>> {
 
-    let params: DuckDnsApiParams = parse_args();
+    let params: duck_dns::DuckDns = parse_args();
 
-    println!("{}", params.token);
-    println!("{}", params.domain);
-    println!("{}", params.ip);
-
-    // Validate args
-    let _uuid = match Uuid::parse_str(params.token.as_str()) {
-        Ok(uuid) => uuid,
-        Err(err) => {
-            println!("Error - Invalid uuid: {}", err);
-            return Ok(())
-        }
-    };
-
-    if !params.ip.is_empty() {
-
-        let ip: IpAddr = match params.ip.parse() {
-
-            Ok(ip_addr) => ip_addr,
-            Err(err) => {
-                println!("Error - Invalid ip: {}", err);
-                return Ok(())
-            }
-        };
-
-        if !ip.is_ipv6() && !ip.is_ipv4() {
-            println!("Not valid ip address");
-        } else {
-            println!("Valid ip address");
-        }
+    if params.is_valid() {
+        params.send_request().await?;
     }
-
-    // Still inside `async fn main`...
-    let https = HttpsConnector::new();
-    let client = Client::builder().build::<_, hyper::Body>(https);
-
-    // Build url
-    let url = format!("{}{}{}{}{}{}",
-        String::from("https://www.duckdns.org/update?domains="),
-        params.domain,
-        String::from("&token="),
-        params.token,
-        String::from("&ip="),
-        params.ip
-    ).parse()?;
-
-    println!("Sending request: {}", &url);
-
-    // Await the response...
-    let resp = client.get(url).await?;
-
-    println!("Response: {}", resp.status());
 
     Ok(())
 }
 
-fn parse_args() -> DuckDnsApiParams {
+fn parse_args() -> duck_dns::DuckDns {
 
-    let matches = App::new("My Super Program")
+    let matches = App::new("Simple command line for Duck Dns API")
 
         .version("0.1")
-        .author("k")
-        .about("Does awesome things")
 
         .arg(Arg::with_name("domain")
             .short("d")
@@ -115,11 +55,11 @@ fn parse_args() -> DuckDnsApiParams {
         String::from("")
     };
 
-    let params = DuckDnsApiParams {
-        token: String::from(matches.value_of("token").unwrap()),
-        domain: String::from(matches.value_of("domain").unwrap()),
-        ip: ip
-    };
+    let params = duck_dns::DuckDns::new(
+        String::from(matches.value_of("token").unwrap()),
+        String::from(matches.value_of("domain").unwrap()),
+        ip
+    );
 
     params
 }
